@@ -1167,4 +1167,661 @@ ALL_UN_LIST.forEach((countryName, idx) => {
   }
 });
 
-f
+function getCountryFlag(code) {
+  if (!code || code.length !== 2) return "🌐";
+  const codePoints = code
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt());
+  return String.fromCodePoint(...codePoints);
+}
+
+// =========================================================================
+// 3. CURRENCY & FORMATTING
+// =========================================================================
+let currentCurrency = 'INR';
+const RATES = { INR: 1, USD: 0.012, EUR: 0.011 };
+const SYMBOLS = { INR: '₹', USD: '$', EUR: '€' };
+
+function formatCurrency(amountINR) {
+  const r = RATES[currentCurrency] || 1;
+  const s = SYMBOLS[currentCurrency] || '₹';
+  const val = Math.round(amountINR * r);
+  return `${s}${val.toLocaleString()}`;
+}
+
+function changeCurrency(curr) {
+  currentCurrency = curr;
+  renderHomeFeatured();
+  filter196Countries();
+  renderSavedPlans();
+  renderCountryComparison();
+  if (currentActivePlan) renderPlanResult();
+}
+
+// =========================================================================
+// 4. NAVIGATION SYSTEM
+// =========================================================================
+function switchTab(tabId) {
+  document.querySelectorAll('.screen-view').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+  const screen = document.getElementById(`screen-${tabId}`);
+  const btn = document.getElementById(`nav-${tabId}`);
+  if (screen) screen.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  if (tabId === 'explore') filter196Countries();
+  if (tabId === 'trips') {
+    renderSavedPlans();
+    renderCountryComparison();
+  }
+}
+
+// =========================================================================
+// 5. STARTING POINT CITY PICKER (METROS & REGIONAL HUBS)
+// =========================================================================
+let selectedCityCategory = 'All';
+
+function openCityPickerModal() {
+  document.getElementById('city-picker-modal').classList.add('active');
+  filterStartCities();
+}
+
+function closeCityPickerModal() {
+  document.getElementById('city-picker-modal').classList.remove('active');
+}
+
+function setCityCategory(cat, element) {
+  selectedCityCategory = cat;
+  document.querySelectorAll('#city-picker-modal .chip').forEach(c => c.classList.remove('active'));
+  element.classList.add('active');
+  filterStartCities();
+}
+
+function filterStartCities() {
+  const query = (document.getElementById('city-search-input').value || '').toLowerCase();
+  const container = document.getElementById('city-picker-items');
+
+  const filtered = START_CITIES.filter(c => {
+    const matchesQuery = c.name.toLowerCase().includes(query) ||
+                         c.airport.toLowerCase().includes(query) ||
+                         c.state.toLowerCase().includes(query);
+    const matchesCat = (selectedCityCategory === 'All') ||
+                       (selectedCityCategory === 'India Top' && c.cat === 'India Top') ||
+                       (selectedCityCategory === 'India Regional' && c.cat === 'India Regional') ||
+                       (selectedCityCategory === 'International' && c.cat === 'International');
+    return matchesQuery && matchesCat;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">No cities found matching "${query}".</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(c => `
+    <div class="city-picker-item" onclick="selectStartCity('${c.name}')">
+      <div>
+        <strong>${c.name}</strong>
+        <div style="font-size:0.72rem; color:var(--text-muted);">${c.airport}</div>
+      </div>
+      <span class="badge-pill" style="font-size:0.68rem;">${c.state}</span>
+    </div>
+  `).join('');
+}
+
+function selectStartCity(cityName) {
+  const found = START_CITIES.find(c => c.name === cityName);
+  if (found) {
+    currentStartCity = found;
+    document.getElementById('start-city-display').value = `${found.name}, ${found.state}`;
+    closeCityPickerModal();
+  }
+}
+
+// =========================================================================
+// 6. EXPLORE DIRECTORY: ALL 196 COUNTRIES
+// =========================================================================
+let activeContinent = 'All';
+
+function setContinentFilter(cont, element) {
+  activeContinent = cont;
+  document.querySelectorAll('#screen-explore .chip').forEach(c => c.classList.remove('active'));
+  element.classList.add('active');
+  filter196Countries();
+}
+
+function filter196Countries() {
+  const search = (document.getElementById('explore-search-input')?.value || '').toLowerCase();
+  const list = document.getElementById('countries-directory-list');
+  if (!list) return;
+
+  const filtered = ALL_196_COUNTRIES.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(search) ||
+                          c.cities.toLowerCase().includes(search) ||
+                          c.continent.toLowerCase().includes(search);
+    const matchesCont = (activeContinent === 'All') || (c.continent.toLowerCase() === activeContinent.toLowerCase());
+    return matchesSearch && matchesCont;
+  });
+
+  const badge = document.getElementById('country-count-badge');
+  if (badge) badge.innerText = `${filtered.length} Nations`;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div style="text-align:center; padding:30px 0; color:var(--text-muted); font-size:0.85rem;">No countries matched your search.</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => `
+    <div class="country-card" onclick="openCountryDetailModal('${c.name}')">
+      <div class="country-header">
+        <div class="flag-name">
+          <span class="flag-icon">${c.flag}</span>
+          <div>
+            <div>${c.name}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">${c.cities}</div>
+          </div>
+        </div>
+        <span class="badge-pill" style="color:var(--primary); font-weight:800;">${c.continent}</span>
+      </div>
+
+      <div class="transport-box">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--primary); margin-bottom:4px;">Transport Facility:</div>
+        <div>
+          <span class="transport-tag">✈ Flights</span>
+          <span class="transport-tag">🚆 Rail / Metro</span>
+          <span class="transport-tag">🚌 Buses / Cabs</span>
+        </div>
+        <div style="font-size:0.7rem; color:var(--text); margin-top:4px;">${c.transport.urban || c.transport.flights}</div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <span style="font-size:0.75rem; color:var(--text-muted);">Est. 7 Days</span>
+        <span style="font-size:0.92rem; font-weight:800; color:var(--primary);">${formatCurrency(c.costINR)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// =========================================================================
+// 7. COUNTRY DETAIL & TRANSPORT MODAL
+// =========================================================================
+function openCountryDetailModal(countryName) {
+  const c = ALL_196_COUNTRIES.find(item => item.name.toLowerCase() === countryName.toLowerCase());
+  if (!c) return;
+
+  document.getElementById('cdm-title').innerHTML = `${c.flag} ${c.name} (${c.continent})`;
+  document.getElementById('cdm-content').innerHTML = `
+    <div class="card" style="background:var(--surface-variant); padding:10px; margin-bottom:12px;">
+      <div style="font-size:0.8rem; font-weight:700;">Top Cities Willing to Travel</div>
+      <div style="font-size:0.85rem; color:var(--primary); font-weight:800;">${c.cities}</div>
+    </div>
+
+    <h4 style="font-size:0.88rem; font-weight:800; margin-bottom:6px; color:var(--primary);">Verified Transport Facilities</h4>
+    <div style="font-size:0.78rem; line-height:1.45; margin-bottom:12px;">
+      <div style="margin-bottom:6px;"><strong>✈ Flights & Airports:</strong> ${c.transport.flights}</div>
+      <div style="margin-bottom:6px;"><strong>🚆 Rail & Metros:</strong> ${c.transport.rail}</div>
+      <div style="margin-bottom:6px;"><strong>🚌 City & Intercity Transit:</strong> ${c.transport.urban}</div>
+      <div style="margin-bottom:6px;"><strong>🚕 Taxis & Transfers:</strong> ${c.transport.localTaxis}</div>
+    </div>
+
+    <div class="card" style="background:#F0FDF4; border-color:#BBF7D0; padding:10px; margin-bottom:10px;">
+      <div style="font-size:0.75rem; font-weight:700; color:#15803D;">Highlights & Best Season</div>
+      <div style="font-size:0.75rem; color:#166534;">${c.highlights} • Best: ${c.bestSeason}</div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0;">
+      <span style="font-size:0.8rem; color:var(--text-muted);">Est. 7-Day Journey (From India)</span>
+      <span style="font-size:1.1rem; font-weight:800; color:var(--primary);">${formatCurrency(c.costINR)}</span>
+    </div>
+  `;
+
+  document.getElementById('cdm-plan-btn').onclick = function() {
+    closeCountryDetailModal();
+    prefillWizardForCountry(c.name);
+  };
+
+  document.getElementById('country-detail-modal').classList.add('active');
+}
+
+function closeCountryDetailModal() {
+  document.getElementById('country-detail-modal').classList.remove('active');
+}
+
+// =========================================================================
+// 8. TRIP PLANNER & MULTIMODAL ROUTE GENERATOR
+// =========================================================================
+let currentActivePlan = null;
+let savedPlans = JSON.parse(localStorage.getItem('voyage_saved_plans_196') || '[]');
+
+function populatePlannerDropdowns() {
+  const select = document.getElementById('plan-target-country');
+  const cmp1 = document.getElementById('cmp-country-1');
+  const cmp2 = document.getElementById('cmp-country-2');
+
+  const optionsHtml = ALL_196_COUNTRIES.map(c => `
+    <option value="${c.name}">${c.flag} ${c.name} (${c.primaryCity})</option>
+  `).join('');
+
+  if (select) select.innerHTML = optionsHtml;
+  if (cmp1) cmp1.innerHTML = optionsHtml;
+  if (cmp2) cmp2.innerHTML = optionsHtml;
+
+  if (cmp2 && ALL_196_COUNTRIES.length > 1) {
+    cmp2.selectedIndex = 1; // Default different country
+  }
+}
+
+function startWizard() {
+  switchTab('plan');
+  resetPlanWizard();
+}
+
+function resetPlanWizard() {
+  document.getElementById('plan-wizard-container').style.display = 'block';
+  document.getElementById('plan-result-container').style.display = 'none';
+  goToPlanStep(1);
+}
+
+function prefillWizardForCountry(countryName) {
+  switchTab('plan');
+  resetPlanWizard();
+  const select = document.getElementById('plan-target-country');
+  if (select) {
+    select.value = countryName;
+    onPlanCountryChange();
+  }
+}
+
+function onPlanCountryChange() {
+  // Sync selected destination
+}
+
+function goToPlanStep(step) {
+  document.getElementById('p-step-1').style.display = (step === 1) ? 'block' : 'none';
+  document.getElementById('p-step-2').style.display = (step === 2) ? 'block' : 'none';
+
+  document.getElementById('plan-step-pill').innerText = `Step ${step}/2`;
+  if (step === 1) document.getElementById('plan-step-title').innerText = '1. Origin & Target Nation';
+  if (step === 2) {
+    document.getElementById('plan-step-title').innerText = '2. Transport & Stays';
+    renderTransportSelection();
+  }
+}
+
+function renderTransportSelection() {
+  const targetCountryName = document.getElementById('plan-target-country').value;
+  const country = ALL_196_COUNTRIES.find(c => c.name === targetCountryName) || ALL_196_COUNTRIES[0];
+  const container = document.getElementById('plan-transport-options-container');
+
+  container.innerHTML = `
+    <div style="background:var(--surface-variant); border-radius:12px; padding:12px; margin-bottom:8px;">
+      <div style="font-weight:700; font-size:0.85rem; color:var(--primary); margin-bottom:4px;">
+        Direct & Connecting Route from ${currentStartCity.name}:
+      </div>
+      <div style="font-size:0.75rem; color:var(--text); line-height:1.4;">
+        🛫 <strong>Flight:</strong> ${currentStartCity.airport} → ${country.primaryCity} International Airport<br/>
+        🚆 <strong>Internal Network:</strong> ${country.transport.rail}<br/>
+        🚇 <strong>Urban Mobility:</strong> ${country.transport.urban}
+      </div>
+    </div>
+  `;
+}
+
+function generatePlanResult() {
+  const targetCountryName = document.getElementById('plan-target-country').value;
+  const country = ALL_196_COUNTRIES.find(c => c.name === targetCountryName) || ALL_196_COUNTRIES[0];
+  const duration = parseInt(document.getElementById('plan-trip-days').value) || 7;
+  const travelers = parseInt(document.getElementById('plan-trip-people').value) || 2;
+  const stayTier = document.getElementById('plan-stay-tier').value;
+
+  // Compute realistic costs based on origin & destination
+  const flightBase = country.continent === 'Asia' ? 26000 : (country.continent === 'Europe' ? 48000 : 62000);
+  const flightTotal = flightBase * travelers;
+  const nightlyStay = (stayTier === 'Luxury') ? 18000 : (stayTier === 'Budget' ? 3500 : 8500);
+  const stayTotal = nightlyStay * (duration - 1) * Math.ceil(travelers / 2);
+  const foodTotal = 1600 * duration * travelers;
+  const transitTotal = 1200 * duration * travelers;
+  const activitiesTotal = 2000 * duration;
+  const totalCost = flightTotal + stayTotal + foodTotal + transitTotal + activitiesTotal;
+
+  // Build daily schedule
+  const days = [];
+  for (let i = 1; i <= duration; i++) {
+    let dayTitle = `Day ${i}: Highlights & Local Exploration`;
+    let transportDetail = `Local metro & suburban rail network (${country.primaryCity})`;
+
+    if (i === 1) {
+      dayTitle = `Day 1: Departure from ${currentStartCity.name} & Arrival in ${country.primaryCity}`;
+      transportDetail = `Flight from ${currentStartCity.airport} → Airport Express transfer to hotel.`;
+    } else if (i === duration) {
+      dayTitle = `Day ${duration}: Craft Markets & Return Flight to ${currentStartCity.name}`;
+      transportDetail = `Airport transit line to departure terminal.`;
+    }
+
+    days.push({
+      dayNumber: i,
+      title: dayTitle,
+      transport: transportDetail,
+      activity: `Experience scenic cultural sights and gastronomy of ${country.cities}.`
+    });
+  }
+
+  currentActivePlan = {
+    id: 'plan_' + Date.now(),
+    title: `${currentStartCity.name} to ${country.name} Journey`,
+    startCity: currentStartCity,
+    targetCountry: country,
+    duration: duration,
+    travelers: travelers,
+    stayTier: stayTier,
+    costs: {
+      flights: flightTotal,
+      stays: stayTotal,
+      food: foodTotal,
+      transit: transitTotal,
+      activities: activitiesTotal,
+      total: totalCost
+    },
+    days: days
+  };
+
+  document.getElementById('plan-wizard-container').style.display = 'none';
+  document.getElementById('plan-result-container').style.display = 'block';
+  renderPlanResult();
+}
+
+function renderPlanResult() {
+  if (!currentActivePlan) return;
+  const p = currentActivePlan;
+
+  document.getElementById('res-route-title').innerText = `${p.startCity.name} ➔ ${p.targetCountry.name}`;
+  document.getElementById('res-route-sub').innerText = `${p.duration} Days • ${p.travelers} Travelers • Base: ${p.targetCountry.primaryCity}`;
+  document.getElementById('res-total-cost').innerText = formatCurrency(p.costs.total);
+
+  document.getElementById('res-transport-summary').innerHTML = `
+    <div style="font-size:0.78rem; line-height:1.45;">
+      <div><strong>🛫 Flight Connection:</strong> Direct/1-Stop from ${p.startCity.airport} to ${p.targetCountry.primaryCity}</div>
+      <div style="margin-top:4px;"><strong>🚆 Local Facility:</strong> ${p.targetCountry.transport.rail}</div>
+      <div style="margin-top:4px;"><strong>🚌 City & Regional:</strong> ${p.targetCountry.transport.urban}</div>
+    </div>
+  `;
+
+  document.getElementById('res-cost-breakdown').innerHTML = `
+    <div style="display:flex; justify-content:space-between; font-size:0.78rem; padding:4px 0; border-bottom:1px solid var(--border);">
+      <span>Flights (${p.travelers} Persons from ${p.startCity.name}):</span>
+      <strong>${formatCurrency(p.costs.flights)}</strong>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:0.78rem; padding:4px 0; border-bottom:1px solid var(--border);">
+      <span>Accommodations (${p.duration - 1} nights, ${p.stayTier}):</span>
+      <strong>${formatCurrency(p.costs.stays)}</strong>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:0.78rem; padding:4px 0; border-bottom:1px solid var(--border);">
+      <span>Food & Dining:</span>
+      <strong>${formatCurrency(p.costs.food)}</strong>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:0.78rem; padding:4px 0; border-bottom:1px solid var(--border);">
+      <span>Transit, Train Passes & Transfers:</span>
+      <strong>${formatCurrency(p.costs.transit)}</strong>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:0.78rem; padding:4px 0; border-bottom:1px solid var(--border);">
+      <span>Activities & Entrance Fees:</span>
+      <strong>${formatCurrency(p.costs.activities)}</strong>
+    </div>
+  `;
+
+  document.getElementById('res-days-container').innerHTML = p.days.map(d => `
+    <div class="card" style="padding:12px; margin-bottom:10px;">
+      <div style="font-weight:800; font-size:0.85rem; color:var(--primary); margin-bottom:4px;">${d.title}</div>
+      <div style="font-size:0.74rem; color:var(--text-muted); margin-bottom:4px;">🚆 <strong>Transit:</strong> ${d.transport}</div>
+      <div style="font-size:0.75rem; color:var(--text);">${d.activity}</div>
+    </div>
+  `).join('');
+}
+
+function savePlanToStorage() {
+  if (!currentActivePlan) return;
+  savedPlans.unshift(currentActivePlan);
+  localStorage.setItem('voyage_saved_plans_196', JSON.stringify(savedPlans));
+  alert(`Plan for '${currentActivePlan.title}' saved to My Plans!`);
+}
+
+// =========================================================================
+// 9. SAVED PLANS & CROSS-COUNTRY COMPARISON
+// =========================================================================
+function setTripsTab(sub) {
+  document.getElementById('btn-trips-saved').className = (sub === 'saved') ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+  document.getElementById('btn-trips-compare').className = (sub === 'compare') ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+  document.getElementById('tab-saved-plans').style.display = (sub === 'saved') ? 'block' : 'none';
+  document.getElementById('tab-compare-plans').style.display = (sub === 'compare') ? 'block' : 'none';
+
+  if (sub === 'compare') renderCountryComparison();
+}
+
+function renderSavedPlans() {
+  const container = document.getElementById('saved-plans-container');
+  if (savedPlans.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:40px 16px;">
+        <h4 style="margin-bottom:6px;">No Saved Plans Yet</h4>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:12px;">Create a route from your city and save it to review anytime.</p>
+        <button class="btn btn-primary btn-sm" onclick="startWizard()">Plan a Route</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = savedPlans.map((p, idx) => `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h4 style="font-size:0.95rem; font-weight:800;">${p.title}</h4>
+          <p style="font-size:0.74rem; color:var(--text-muted); margin-top:2px;">
+            ${p.duration} Days • ${p.travelers} Travelers • From ${p.startCity.name}
+          </p>
+        </div>
+        <span style="font-weight:800; color:var(--primary); font-size:0.95rem;">${formatCurrency(p.costs.total)}</span>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn btn-primary btn-sm" style="flex:1;" onclick="viewSavedPlan(${idx})">View Route</button>
+        <button class="btn btn-outline btn-sm" style="color:#EF4444;" onclick="deleteSavedPlan(${idx})">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function viewSavedPlan(idx) {
+  currentActivePlan = savedPlans[idx];
+  switchTab('plan');
+  document.getElementById('plan-wizard-container').style.display = 'none';
+  document.getElementById('plan-result-container').style.display = 'block';
+  renderPlanResult();
+}
+
+function deleteSavedPlan(idx) {
+  if (confirm("Delete this plan?")) {
+    savedPlans.splice(idx, 1);
+    localStorage.setItem('voyage_saved_plans_196', JSON.stringify(savedPlans));
+    renderSavedPlans();
+  }
+}
+
+function renderCountryComparison() {
+  const nameA = document.getElementById('cmp-country-1')?.value || 'Japan';
+  const nameB = document.getElementById('cmp-country-2')?.value || 'Switzerland';
+
+  const a = ALL_196_COUNTRIES.find(c => c.name === nameA) || ALL_196_COUNTRIES[0];
+  const b = ALL_196_COUNTRIES.find(c => c.name === nameB) || ALL_196_COUNTRIES[1];
+
+  const wrap = document.getElementById('country-comparison-table-wrap');
+  if (!wrap) return;
+
+  wrap.innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:0.75rem; margin-top:10px;">
+      <thead>
+        <tr style="background:var(--surface-variant);">
+          <th style="padding:8px; text-align:left;">Metric</th>
+          <th style="padding:8px; text-align:left;">${a.flag} ${a.name}</th>
+          <th style="padding:8px; text-align:left;">${b.flag} ${b.name}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;"><strong>Continent</strong></td>
+          <td style="padding:8px;">${a.continent}</td>
+          <td style="padding:8px;">${b.continent}</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;"><strong>Key Cities</strong></td>
+          <td style="padding:8px;">${a.cities}</td>
+          <td style="padding:8px;">${b.cities}</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;"><strong>Est. 7D Budget</strong></td>
+          <td style="padding:8px; color:var(--primary); font-weight:800;">${formatCurrency(a.costINR)}</td>
+          <td style="padding:8px; color:var(--primary); font-weight:800;">${formatCurrency(b.costINR)}</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;"><strong>Train / Rail Network</strong></td>
+          <td style="padding:8px;">${a.transport.rail}</td>
+          <td style="padding:8px;">${b.transport.rail}</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;"><strong>City Transit</strong></td>
+          <td style="padding:8px;">${a.transport.urban}</td>
+          <td style="padding:8px;">${b.transport.urban}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px;"><strong>Best Season</strong></td>
+          <td style="padding:8px;">${a.bestSeason}</td>
+          <td style="padding:8px;">${b.bestSeason}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+// =========================================================================
+// 10. AI TRAVEL TRANSIT ADVISOR
+// =========================================================================
+function quickAiQuery(q) {
+  document.getElementById('chat-input').value = q;
+  sendChatMessage();
+}
+
+function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = (input.value || '').trim();
+  if (!text) return;
+
+  const chatBox = document.getElementById('chat-messages');
+
+  const userMsg = document.createElement('div');
+  userMsg.className = 'chat-bubble chat-user';
+  userMsg.innerText = text;
+  chatBox.appendChild(userMsg);
+  input.value = '';
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  const botMsg = document.createElement('div');
+  botMsg.className = 'chat-bubble chat-bot';
+  botMsg.innerText = "Checking flight networks and rail timetables...";
+  chatBox.appendChild(botMsg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  setTimeout(() => {
+    botMsg.innerHTML = getAiAnswer(text);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+function getAiAnswer(query) {
+  const q = query.toLowerCase();
+  if (q.includes('delhi') && q.includes('swiss')) {
+    return `From New Delhi (DEL), Swiss International Air Lines operates direct non-stop flights to Zurich Airport (ZRH) in 8h 50m. Once in Switzerland, the Swiss Travel Pass covers the SBB train network, panoramic cogwheel rails to Mount Rigi and Jungfrau, plus all city trams!`;
+  }
+  if (q.includes('mumbai') && (q.includes('thailand') || q.includes('bangkok'))) {
+    return `From Mumbai (BOM), IndiGo and Thai Airways run daily direct 4h 30m flights to Bangkok (BKK). For transport within Bangkok, take the Airport Rail Link into the city and use the BTS Skytrain (₹40-₹60 per ride) to skip road traffic completely!`;
+  }
+  if (q.includes('japan') || q.includes('shinkansen')) {
+    return `In Japan, the Shinkansen (Bullet Train) travels between Tokyo and Kyoto in 2h 15m. For Tokyo city travel, pick up a Pasmo or Suica IC card at the airport (or add it to your mobile wallet) to tap through all Tokyo Metro and JR Yamanote lines!`;
+  }
+  if (q.includes('paris') || q.includes('bengaluru')) {
+    return `From Bengaluru (BLR), Air France operates direct non-stop flights to Paris CDG (approx 9h 40m). In Paris, the Navigo Easy contactless pass covers all 16 Métro lines, RER suburban trains, and Montmartre Funicular.`;
+  }
+  return `Great route question! Every one of our 196 destination countries has integrated transport facilities: from high-speed trains (TGV, Shinkansen, SBB) to metro cards and island speedboats. Would you like me to pre-fill a complete itinerary from ${currentStartCity.name}?`;
+}
+
+function runAiGlobalSearch() {
+  const query = (document.getElementById('home-ai-query').value || '').toLowerCase();
+  const res = document.getElementById('home-ai-results');
+  res.style.display = 'block';
+
+  let matches = ALL_196_COUNTRIES.filter(c => {
+    if (query.includes('mountain') || query.includes('lake')) {
+      return c.name === 'Switzerland' || c.name === 'Norway' || c.name === 'Austria' || c.name === 'Nepal';
+    }
+    if (query.includes('beach') || query.includes('island')) {
+      return c.name === 'Thailand' || c.name === 'Indonesia' || c.name === 'Maldives';
+    }
+    return c.continent === 'Europe' || c.continent === 'Asia';
+  }).slice(0, 3);
+
+  if (matches.length === 0) matches = ALL_196_COUNTRIES.slice(0, 3);
+
+  res.innerHTML = `
+    <div style="background:var(--primary-light); border:1px solid #BFDBFE; border-radius:12px; padding:10px;">
+      <div style="font-weight:800; font-size:0.8rem; color:var(--primary-dark); margin-bottom:6px;">Top Matches From ${currentStartCity.name}:</div>
+      ${matches.map(m => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #DBEAFE;">
+          <div>
+            <div style="font-size:0.82rem; font-weight:700;">${m.flag} ${m.name} (${m.primaryCity})</div>
+            <div style="font-size:0.7rem; color:var(--text-muted);">${m.transport.urban}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="prefillWizardForCountry('${m.name}')">Select</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// =========================================================================
+// 11. HOME SCREEN FEATURED
+// =========================================================================
+function renderHomeFeatured() {
+  const container = document.getElementById('home-featured-list');
+  if (!container) return;
+
+  container.innerHTML = ALL_196_COUNTRIES.slice(0, 5).map(c => `
+    <div class="country-card" onclick="openCountryDetailModal('${c.name}')">
+      <div class="country-header">
+        <div class="flag-name">
+          <span class="flag-icon">${c.flag}</span>
+          <div>
+            <div>${c.name}</div>
+            <div style="font-size:0.74rem; color:var(--text-muted);">${c.cities}</div>
+          </div>
+        </div>
+        <span class="badge-pill" style="color:var(--primary); font-weight:800;">${formatCurrency(c.costINR)}</span>
+      </div>
+      <div style="font-size:0.72rem; color:var(--text); margin-top:4px;">
+        🚆 <strong>Transit:</strong> ${c.transport.rail || c.transport.urban}
+      </div>
+    </div>
+  `).join('');
+}
+
+// =========================================================================
+// 12. INITIALIZATION
+// =========================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  populatePlannerDropdowns();
+  renderHomeFeatured();
+  filter196Countries();
+  renderSavedPlans();
+});
+</script>
+</body>
+</html>
